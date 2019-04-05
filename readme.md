@@ -11,4 +11,5 @@ Options:
         -o [path]       Specifies output path.
         -x              Unpacks archive to folder. Requires -i and -o.
         -p              Packs folder to archive. Requires -i and -o.
+        -d              Decompresses unpacked subfiles. Requires -x.
 ```

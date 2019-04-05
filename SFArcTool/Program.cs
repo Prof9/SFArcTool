@@ -105,6 +105,7 @@ namespace SFArcTool {
 			Console.WriteLine("        -o [path]       Specifies output path.");
 			Console.WriteLine("        -x              Unpacks archive to folder. Requires -i and -o.");
 			Console.WriteLine("        -p              Packs folder to archive. Requires -i and -o.");
+			Console.WriteLine("        -d              Decompresses unpacked subfiles. Requires -x.");
 			Console.WriteLine();
 			Console.WriteLine("For option -p, subfiles in the input directory must be named as \"XXX.ext\" or \"name_XXX.ext\", where \"name\" is an arbitrary string not containing '.' or '_', \"XXX\" is the subfile number and \"ext\" is any extension (multiple extensions are allowed. Any files that do not adhere to this format will be skipped.");
 		}
