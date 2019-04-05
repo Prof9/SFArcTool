@@ -111,9 +111,11 @@ namespace SFArcTool {
 		static void Extract(string inFile, string outPath) {
 			List<SubFile> entries = new List<SubFile>();
 
-			using (FileStream arcFile = new FileStream(inFile, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+			using (FileStream arcFile = new FileStream(inFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+			using (MemoryStream uncompressed = new MemoryStream()) {
 				BinaryReader br = new BinaryReader(arcFile);
 				long headerEnd = arcFile.Length;
+				long maxUncompressedSize = 0;
 
 				// Load header.
 				while (arcFile.Position < headerEnd) {
@@ -126,6 +128,9 @@ namespace SFArcTool {
 						Compressed = (size & 0x80000000) != 0
 					};
 					entries.Add(entry);
+					if (entry.Compressed) {
+						maxUncompressedSize = Math.Max(entry.Size, maxUncompressedSize);
+					}
 
 					headerEnd = Math.Min(entry.Offset, headerEnd);
 				}
@@ -140,6 +145,8 @@ namespace SFArcTool {
 				Directory.CreateDirectory(outPath);
 
 				int digits = (entries.Count - 1).ToString().Length;
+				// Pre-allocate decompression buffer.
+				uncompressed.SetLength(maxUncompressedSize);
 
 				// Extract the files.
 				for (int i = 0; i < entries.Count; i++) {
@@ -159,10 +166,9 @@ namespace SFArcTool {
 					if (entry.Compressed) {
 						// Get compressed size by decompressing, and check if decompressed size matches size in file entry.
 						arcFile.Position = start;
-						using (MemoryStream uncompressed = new MemoryStream(entry.Size)) {
-							if (!LZ77.Decompress(arcFile, uncompressed) || uncompressed.Length != entry.Size) {
-								throw new InvalidDataException("Could not read subfile " + i + ": invalid LZ77 compressed data.");
-							}
+						uncompressed.Position = 0;
+						if (!LZ77.Decompress(arcFile, uncompressed) || uncompressed.Position != entry.Size) {
+							throw new InvalidDataException("Could not read subfile " + i + ": invalid LZ77 compressed data.");
 						}
 						size = arcFile.Position - start;
 					} else {
