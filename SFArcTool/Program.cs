@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 
 namespace SFArcTool {
 	class Program {
@@ -23,6 +22,7 @@ namespace SFArcTool {
 				string inPath = null;
 				string outPath = null;
 				string mode = null;
+				bool decompress = false;
 
 				// Read flags.
 				while (argEnum.MoveNext()) {
@@ -51,6 +51,13 @@ namespace SFArcTool {
 							throw new Exception("Mode already set (" + mode + ").");
 						}
 						break;
+					case "-d":
+						if (!decompress) {
+							decompress = true;
+						} else {
+							throw new Exception("-d already set.");
+						}
+						break;
 					default:
 						throw new Exception("Unknown option " + argEnum.Current + ".");
 					}
@@ -64,13 +71,15 @@ namespace SFArcTool {
 					if (outPath is null)
 						throw new Exception(mode + " needs an output path.");
 
-					Extract(inPath, outPath);
+					Extract(inPath, outPath, decompress);
 					break;
 				case "-p":
 					if (inPath is null)
 						throw new Exception(mode + " needs an input path.");
 					if (outPath is null)
 						throw new Exception(mode + " needs an output path.");
+					if (decompress)
+						throw new Exception("-d not valid for packing.");
 
 					Pack(inPath, outPath);
 					break;
@@ -108,7 +117,7 @@ namespace SFArcTool {
 			}
 		}
 
-		static void Extract(string inFile, string outPath) {
+		static void Extract(string inFile, string outPath, bool decompress) {
 			List<SubFile> entries = new List<SubFile>();
 
 			using (FileStream arcFile = new FileStream(inFile, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -170,17 +179,18 @@ namespace SFArcTool {
 						if (!LZ77.Decompress(arcFile, uncompressed) || uncompressed.Position != entry.Size) {
 							throw new InvalidDataException("Could not read subfile " + i + ": invalid LZ77 compressed data.");
 						}
-						size = arcFile.Position - start;
+						size = decompress ? uncompressed.Position : (arcFile.Position - start);
+						uncompressed.Position = 0;
 					} else {
 						size = entry.Size;
-					}
-					if (size < 0 || size > int.MaxValue) {
-						throw new InvalidDataException("Could not read subfile " + i + ": invalid size.");
 					}
 
 					// Read the file.
 					arcFile.Position = start;
-					entry.Data = br.ReadBytes((int)size);
+					entry.Data = new byte[size];
+					if ((decompress && entry.Compressed ? (Stream)uncompressed : (Stream)arcFile).Read(entry.Data, 0, (int)size) < size) {
+						throw new InvalidDataException("Could not read subfile " + i + ": invalid size.");
+					}
 
 					// Write the file.
 					using (FileStream subFile = new FileStream(outFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read)) {
