@@ -20,20 +20,17 @@ namespace SFArcTool {
 			if (!input.CanRead)
 				throw new ArgumentException("The input stream does not support reading.", nameof(input));
 
-			if (input.Length - input.Position < 4) {
-				return false;
-			}
-
-			// Create input reader.
-			BinaryReader reader = new BinaryReader(input);
-
 			// Check LZ77 type.
-			if (input.ReadByte() != 0x10) {
+			int lzType = input.ReadByte();
+			if (lzType != 0x10 && lzType != 0x11) {
 				return false;
 			}
 
 			// Read the decompressed size.
-			int size = reader.ReadUInt16() | (reader.ReadByte() << 16);
+			int size = input.ReadByte() | (input.ReadByte() << 8) | (input.ReadByte() << 16);
+			if (size < 0) {
+				return false;
+			}
 
 			// Create decompression stream.
 			using (MemoryStream temp = new MemoryStream(size)) {
@@ -57,25 +54,54 @@ namespace SFArcTool {
 
 							temp.WriteByte((byte)b);
 						} else {
-							if (input.Length - input.Position < 2) {
+							// Compressed block; read block.
+							int block = (input.ReadByte() << 8) | input.ReadByte();
+							if (block < 0) {
 								return false;
 							}
+							int blockType = (block >> 12);
 
-							// Compressed block; read block.
-							ushort block = reader.ReadUInt16();
-							// Get byte count.
-							int count = ((block >> 4) & 0xF) + 3;
-							// Get displacement.
-							int disp = ((block & 0xF) << 8) | (block >> 8);
+							int count, disp;
+							if (lzType == 0x11 && blockType == 1) {
+								// Read second part of block.
+								int block2 = (input.ReadByte() << 8) | input.ReadByte();
+								if (block2 < 0) {
+									return false;
+								}
+								// Get byte count. [273..65808]
+								count = (((block & 0xFFF) << 4) | (block2 >> 12)) + 273;
+								// Get displacement. [1..4096]
+								disp = (block2 & 0xFFF) + 1;
+							} else if (lzType == 0x11 && blockType == 0) {
+								// Read second part of block.
+								int block2 = input.ReadByte();
+								if (block2 < 0) {
+									return false;
+								}
+								// Get byte count. [17..272]
+								count = (block >> 4) + 17;
+								// Get displacement. [1..4096]
+								disp = (((block & 0xF) << 8) | block2) + 1;
+							} else if (lzType == 0x11) {
+								// Get byte count. [1..16]
+								count = blockType + 1;
+								// Get displacement. [1..4096]
+								disp = (block & 0xFFF) + 1;
+							} else {
+								// Get byte count. [3..18]
+								count = blockType + 3;
+								// Get displacement. [1..4096]
+								disp = (block & 0xFFF) + 1;
+							}
 
 							// Check for invalid displacement.
-							if (disp + 1 > temp.Position) {
+							if (disp > temp.Position) {
 								return false;
 							}
 
 							// Save current position and copying position.
 							long outPos = temp.Position;
-							long copyPos = temp.Position - disp - 1;
+							long copyPos = temp.Position - disp;
 
 							// Copy all bytes.
 							for (int j = 0; j < count; j++) {
