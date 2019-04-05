@@ -12,4 +12,5 @@ Options:
         -x              Unpacks archive to folder. Requires -i and -o.
         -p              Packs folder to archive. Requires -i and -o.
         -d              Decompresses unpacked subfiles. Requires -x.
+        -eof            Indicates the archive has an EOF subfile entry. Requires -x or -p.
 ```

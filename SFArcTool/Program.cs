@@ -23,6 +23,7 @@ namespace SFArcTool {
 				string outPath = null;
 				string mode = null;
 				bool decompress = false;
+				bool eofEntry = false;
 
 				// Read flags.
 				while (argEnum.MoveNext()) {
@@ -58,6 +59,13 @@ namespace SFArcTool {
 							throw new Exception("-d already set.");
 						}
 						break;
+					case "-eof":
+						if (!eofEntry) {
+							eofEntry = true;
+						} else {
+							throw new Exception("-eof already set.");
+						}
+						break;
 					default:
 						throw new Exception("Unknown option " + argEnum.Current + ".");
 					}
@@ -71,7 +79,7 @@ namespace SFArcTool {
 					if (outPath is null)
 						throw new Exception(mode + " needs an output path.");
 
-					Extract(inPath, outPath, decompress);
+					Extract(inPath, outPath, decompress, eofEntry);
 					break;
 				case "-p":
 					if (inPath is null)
@@ -81,7 +89,7 @@ namespace SFArcTool {
 					if (decompress)
 						throw new Exception("-d not valid for packing.");
 
-					Pack(inPath, outPath);
+					Pack(inPath, outPath, eofEntry);
 					break;
 				default:
 					PrintUsage();
@@ -106,6 +114,7 @@ namespace SFArcTool {
 			Console.WriteLine("        -x              Unpacks archive to folder. Requires -i and -o.");
 			Console.WriteLine("        -p              Packs folder to archive. Requires -i and -o.");
 			Console.WriteLine("        -d              Decompresses unpacked subfiles. Requires -x.");
+			Console.WriteLine("        -eof            Indicates the archive has an EOF subfile entry. Requires -x or -p.");
 			Console.WriteLine();
 			Console.WriteLine("For option -p, subfiles in the input directory must be named as \"XXX.ext\" or \"name_XXX.ext\", where \"name\" is an arbitrary string not containing '.' or '_', \"XXX\" is the subfile number and \"ext\" is any extension (multiple extensions are allowed. Any files that do not adhere to this format will be skipped.");
 		}
@@ -118,7 +127,7 @@ namespace SFArcTool {
 			}
 		}
 
-		static void Extract(string inFile, string outPath, bool decompress) {
+		static void Extract(string inFile, string outPath, bool decompress, bool eofEntry) {
 			List<SubFile> entries = new List<SubFile>();
 
 			using (FileStream arcFile = new FileStream(inFile, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -128,11 +137,12 @@ namespace SFArcTool {
 				long maxUncompressedSize = 0;
 
 				// Load header.
+				SubFile entry = default;
 				while (arcFile.Position < headerEnd) {
 					uint offset = br.ReadUInt32();
 					uint size = br.ReadUInt32();
 
-					SubFile entry = new SubFile() {
+					entry = new SubFile() {
 						Offset = offset,
 						Size = (int)(size & 0x7FFFFFFF),
 						Compressed = (size & 0x80000000) != 0
@@ -144,8 +154,12 @@ namespace SFArcTool {
 
 					headerEnd = Math.Min(entry.Offset, headerEnd);
 				}
-				if (arcFile.Position != headerEnd) {
+				if (arcFile.Position != headerEnd || (eofEntry && (entry.Size > 0 || entry.Compressed))) {
 					throw new InvalidDataException("Invalid archive file header.");
+				}
+				if (eofEntry) {
+					// Remove EOF entry.
+					entries.RemoveAt(entries.Count - 1);
 				}
 
 				// Create directory to hold files.
@@ -160,7 +174,7 @@ namespace SFArcTool {
 
 				// Extract the files.
 				for (int i = 0; i < entries.Count; i++) {
-					SubFile entry = entries[i];
+					entry = entries[i];
 					long start = entry.Offset;
 
 					// Skip last size 0xFFFF entry.
@@ -203,7 +217,7 @@ namespace SFArcTool {
 			Console.WriteLine("Extracted " + entries.Count + " subfiles from archive " + Path.GetFileName(inFile) + ".");
 		}
 
-		static void Pack(string inPath, string outFile) {
+		static void Pack(string inPath, string outFile, bool eofEntry) {
 			List<SubFile?> entries = new List<SubFile?>();
 
 			// Parse every file.
@@ -267,6 +281,10 @@ namespace SFArcTool {
 					Data = buffer
 				};
 				entries[fileNum] = entry;
+			}
+			if (eofEntry) {
+				// Append EOF entry.
+				entries.Add(null);
 			}
 
 			// Create directory for the output file.
