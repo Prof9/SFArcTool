@@ -208,7 +208,7 @@ namespace SFArcTool {
 					}
 
 					// Write the file.
-					using (FileStream subFile = new FileStream(outFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read)) {
+					using (FileStream subFile = new FileStream(outFilePath, FileMode.Create, FileAccess.Write, FileShare.Read)) {
 						subFile.Write(entry.Data, 0, entry.Data.Length);
 					}
 				}
