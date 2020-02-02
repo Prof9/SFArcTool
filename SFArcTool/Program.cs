@@ -251,7 +251,7 @@ namespace SFArcTool {
 					using (MemoryStream ms = new MemoryStream()) {
 						fs.Position = 0;
 						ms.Position = 0;
-						if (LZ77.Decompress(fs, ms)) {
+						if (LZ77.Decompress(fs, ms) && ms.Position > 8) {
 							compressed = true;
 							size = ms.Position;
 						} else {
